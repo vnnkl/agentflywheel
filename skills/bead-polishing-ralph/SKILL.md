@@ -77,9 +77,14 @@ Every bead's acceptance criteria must end with the quality gates from the PRD. T
 - [ ] pnpm typecheck passes       <- universal gate
 - [ ] pnpm lint passes             <- universal gate
 - [ ] Verify in browser            <- UI gate (only for UI stories)
+
+When all acceptance criteria are met, output <promise>COMPLETE</promise>
 ```
 
+> **CRITICAL:** The `<promise>COMPLETE</promise>` signal is how ralph-tui detects that a bead is done. Exit code 0 alone does NOT trigger completion — only this explicit signal does. Every bead description MUST include this instruction, or the agent will finish its work but ralph-tui will not advance to the next bead.
+
 **Check for:**
+- Beads missing the `<promise>COMPLETE</promise>` instruction (most critical)
 - Beads missing quality gates entirely
 - Beads with quality gates but missing story-specific criteria
 - UI beads missing browser verification gates
@@ -272,6 +277,8 @@ Ready to run: ralph-tui run --tracker beads-rust --epic <epic-id>
 
 **Over-polishing.** If you're on round 7 and still finding issues, the PRD is underspecified. Fix the PRD, regenerate beads, then polish.
 
+**Missing completion signal.** Every bead must end with `When all acceptance criteria are met, output <promise>COMPLETE</promise>`. Without this, ralph-tui cannot detect that the agent finished and the loop stalls. This is the #1 cause of "stuck" ralph-tui runs.
+
 **Skipping the size check.** The most common ralph-tui failure is beads that are too large for one context window. When in doubt, split.
 
 ---
@@ -283,6 +290,7 @@ Before declaring beads ralph-ready:
 - [ ] Ran at least 4 polishing rounds
 - [ ] Convergence reached ~75%+
 - [ ] Every bead fits one ralph-tui iteration (2-3 sentence scope)
+- [ ] Every bead includes `<promise>COMPLETE</promise>` instruction
 - [ ] Quality gates appended to every bead
 - [ ] UI beads have browser verification gate (if applicable)
 - [ ] All acceptance criteria are verifiable (no vague language)
