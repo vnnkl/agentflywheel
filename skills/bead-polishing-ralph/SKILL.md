@@ -28,10 +28,10 @@ A 30-second fix to a bead description prevents a 30-minute failed ralph-tui iter
 Check which beads CLI is available:
 
 ```bash
-which br && echo "beads-rust" || (which bd && echo "beads-go" || echo "none")
+which br && echo "beads-rust" || (which bd && echo "beads" || echo "none")
 ```
 
-Use `br` commands if beads-rust is installed, `bd` commands if beads-go. The polishing process is identical — only the CLI prefix changes.
+Use `br` commands if beads-rust is installed, `bd` commands if the original beads is installed. The polishing process is identical — only the CLI prefix changes.
 
 ### Gather Context
 
@@ -266,7 +266,7 @@ br close <bead-id>
 br sync --flush-only
 ```
 
-For beads-go (`bd`), replace `br` with `bd` and skip `br sync --flush-only`.
+For beads (`bd`), replace `br` with `bd` and skip `br sync --flush-only`.
 
 > **CRITICAL:** Always use `<<'EOF'` (single-quoted) for HEREDOCs. This prevents shell interpretation of backticks, `$variables`, and `()` in descriptions.
 
@@ -326,4 +326,4 @@ Before declaring beads ralph-ready:
 - [ ] No orphan beads without a clear purpose
 - [ ] Epic has external-ref linking back to source PRD
 - [ ] Polishing log recorded with metrics per round
-- [ ] `br sync --flush-only` run (beads-rust) or beads.jsonl verified (beads-go)
+- [ ] `br sync --flush-only` run (beads-rust) or beads.jsonl verified (beads)
