@@ -36,9 +36,34 @@ Use `br` commands if beads-rust is installed, `bd` commands if beads-go. The pol
 ### Gather Context
 
 1. **Read the source plan/PRD** that the beads were created from. Polishing without the source is guessing.
-2. **List existing beads**: `br list --json` or `bd list --json`
-3. **Identify the epic**: Which epic are we polishing?
-4. **Extract Quality Gates** from the PRD's "Quality Gates" section. If none exists, ask the user what commands should pass (e.g., `pnpm typecheck`, `pnpm lint`).
+2. **Extract Quality Gates** from the PRD's "Quality Gates" section. If none exists, ask the user what commands should pass (e.g., `pnpm typecheck`, `pnpm lint`).
+3. **Check if beads exist**: `br list --json` or `bd list --json`
+
+### Create Beads if None Exist
+
+If no beads exist yet, create them from the source PRD before polishing. This makes the separate "convert to tasks" step optional — bead-polishing-ralph can handle the full plan-to-polished-beads pipeline.
+
+1. **Create an epic** linking back to the PRD:
+   ```bash
+   br create --type=epic \
+     --title="[Feature Name]" \
+     --description="$(cat <<'EOF'
+   [Feature description from PRD]
+   EOF
+   )" \
+     --external-ref="prd:./path-to-prd.md"
+   ```
+
+2. **Create one bead per user story/requirement** from the PRD. For each story:
+   - Title matches the story title
+   - Description includes story context, acceptance criteria, quality gates, and the `<promise>COMPLETE</promise>` instruction
+   - Priority reflects dependency order (schema=1, backend=2, UI=3, polish=4)
+
+3. **Add dependencies** between beads: `br dep add <issue> <depends-on>`
+
+4. **Identify the epic**: Which epic are we polishing?
+
+This initial creation is intentionally rough — it's the "first pass" that the polishing rounds will refine. Don't over-invest here; the convergence loop catches everything.
 
 ---
 
