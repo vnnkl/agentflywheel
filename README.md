@@ -25,20 +25,24 @@ Three review modes that catch different bug categories:
 ## Recommended Flow
 
 ```
-/idea-wizard          "What should I build?"
+/idea-wizard               "What should I build?"
       |
-/deep-planning        Comprehensive markdown plan (85% of effort)
+/deep-planning             Comprehensive markdown plan (85% of effort)
       |
-/competing-plans      3 parallel plans -> best-of-all-worlds synthesis
+/competing-plans           3 parallel plans -> best-of-all-worlds synthesis
       |
-[convert to tasks]    /prd-to-issues or /ralph-tui-create-beads
+/bead-polishing-ralph      Create beads (if none exist) + 4-6 polish rounds
+      |                    until ~75% convergence. Enforces ralph-tui constraints:
+      |                    one-context-window sizing, quality gates, completion signal.
       |
-/bead-polishing       4-6 rounds until ~75% convergence
+[implementation]           ralph-tui run --tracker beads-rust
       |
-[implementation]      Agents claim tasks, write code
-      |
-/multi-mode-review    Fresh Eyes + Cross-Agent + Random Exploration
+/multi-mode-review         Fresh Eyes + Cross-Agent + Random Exploration
 ```
+
+> **Note:** `/bead-polishing-ralph` can create beads from the plan if none exist yet,
+> or you can use `/ralph-tui-create-beads` first and then polish separately.
+> `/bead-polishing` is the generic (non-ralph) variant for GitHub issues or other formats.
 
 ## Installation
 
