@@ -1,6 +1,6 @@
 ---
 name: bead-polishing-ralph
-description: "Iteratively refine beads for ralph-tui execution through 4-6 polishing rounds until convergence, ensuring each bead fits one agent context window, has quality gates appended, uses correct bd/br CLI syntax, and follows schema-backend-UI dependency ordering. Use when user wants to polish beads for ralph, refine ralph tasks, iterate on beads before running ralph-tui, review bead quality for ralph execution, or check if beads are ralph-ready. Triggers on: polish beads ralph, refine beads for ralph, ralph bead review, check beads, are beads ready, polish for ralph-tui, iterate ralph beads."
+description: "Iteratively refine beads for ralph-tui execution through 4-6 polishing rounds until convergence, ensuring each bead fits one agent context window, has quality gates appended, uses correct bd CLI syntax, and follows schema-backend-UI dependency ordering. Use when user wants to polish beads for ralph, refine ralph tasks, iterate on beads before running ralph-tui, review bead quality for ralph execution, or check if beads are ralph-ready. Triggers on: polish beads ralph, refine beads for ralph, ralph bead review, check beads, are beads ready, polish for ralph-tui, iterate ralph beads."
 ---
 
 # Bead Polishing for Ralph-TUI
@@ -25,19 +25,13 @@ A 30-second fix to a bead description prevents a 30-minute failed ralph-tui iter
 
 ### Detect CLI
 
-Check which beads CLI is available:
-
-```bash
-which br && echo "beads-rust" || (which bd && echo "beads" || echo "none")
-```
-
-Use `br` commands if beads-rust is installed, `bd` commands if the original beads is installed. The polishing process is identical — only the CLI prefix changes.
+Use `bd` (beads) as the CLI for all bead operations. The polishing process uses `bd` commands throughout.
 
 ### Gather Context
 
 1. **Read the source plan/PRD** that the beads were created from. Polishing without the source is guessing.
 2. **Extract Quality Gates** from the PRD's "Quality Gates" section. If none exists, ask the user what commands should pass (e.g., `pnpm typecheck`, `pnpm lint`).
-3. **Check if beads exist**: `br list --json` or `bd list --json`
+3. **Check if beads exist**: `bd list --json`
 
 ### Create Beads if None Exist
 
@@ -45,7 +39,7 @@ If no beads exist yet, create them from the source PRD before polishing. This ma
 
 1. **Create an epic** linking back to the PRD:
    ```bash
-   br create --type=epic \
+   bd create --type=epic \
      --title="[Feature Name]" \
      --description="$(cat <<'EOF'
    [Feature description from PRD]
@@ -58,10 +52,13 @@ If no beads exist yet, create them from the source PRD before polishing. This ma
    - Title matches the story title
    - Description includes story context, acceptance criteria, quality gates, and the `<promise>COMPLETE</promise>` instruction
    - Priority reflects dependency order (schema=1, backend=2, UI=3, polish=4)
+   - Pass `--parent=<epic-id>` at creation time so the parent link exists from the start
 
-3. **Add dependencies** between beads: `br dep add <issue> <depends-on>`
+3. **Add dependencies** between beads: `bd dep add <issue> <depends-on>`. **NEVER** add `bd dep add <epic> <child>` ("epic depends on child"). The parent-child link already represents "epic completes when children complete" — adding a reverse dep creates a cycle with the parent-child relation and breaks `bd ready`.
 
 4. **Identify the epic**: Which epic are we polishing?
+
+> **CRITICAL — Epic type.** The epic MUST be `--type=epic` (not `task` / `feature` / `bug`). `bd` represents `--parent=<epic>` as a `parent-child` dependency on the child, and `bd ready` treats any open ancestor as a blocker UNLESS the ancestor is `type=epic`. A `feature`-typed parent will silently block every child from appearing in `bd ready`, which causes ralph-tui to report "no more tasks available after starting." Verify with `bd show <id>` — the line should read `[epic]`.
 
 This initial creation is intentionally rough — it's the "first pass" that the polishing rounds will refine. Don't over-invest here; the convergence loop catches everything.
 
@@ -88,7 +85,7 @@ ralph-tui's #1 constraint: each bead must be completable in **one agent iteratio
 
 **Rule of thumb:** If you can't describe the change in 2-3 sentences, it's too big for ralph-tui.
 
-**Split oversized beads** into vertical slices that each produce a working increment. Use `br create` to make the new beads and `br close` + recreate if an existing bead needs splitting.
+**Split oversized beads** into vertical slices that each produce a working increment. Use `bd create` to make the new beads and `bd close` + recreate if an existing bead needs splitting.
 
 ### Check 2: Quality Gates Appended
 
@@ -115,9 +112,30 @@ When all acceptance criteria are met, output <promise>COMPLETE</promise>
 - UI beads missing browser verification gates
 - Quality gates that don't match the PRD's Quality Gates section
 
-### Check 3: Dependency Integrity
+### Check 3: Dependency Integrity + Parent Linkage
 
-ralph-tui respects dependencies strictly: it will never select a bead whose dependencies are still open. Broken dependencies block the entire pipeline.
+Two independent graph properties must both be correct for ralph-tui to schedule anything. They look similar but answer different questions: parent linkage answers *"which beads belong to this epic?"* (ralph-tui's `--epic <id>` filter), and dependencies answer *"in what order can they run?"*. Missing parent links and missing deps fail in different ways.
+
+#### Parent linkage (ralph-tui's epic filter)
+
+> **CRITICAL:** `ralph-tui --epic <id>` filters by `parent`, NOT by the dependency graph. Beads that block the epic via `bd dep add <epic> <child>` are invisible to ralph-tui unless they also carry `parent=<epic>`. Symptom: ralph-tui reports "no tasks or epic found" despite a populated `bd ready` queue. This is the #2 cause of failed ralph runs (after missing `<promise>COMPLETE</promise>` signals).
+
+**Verify:**
+- The epic itself has `type=epic` (see `bd show <epic-id>` — the header should read `[epic]`). A `feature`/`task`-typed parent silently blocks every child from `bd ready`.
+- Every child bead has `parent = <epic-id>` set explicitly.
+- `bd show <epic-id>` lists every child under a `CHILDREN` section. If a bead you expect to see is missing, its `--parent` was never set.
+- `bd ready` returns at least the schema/leading bead. If it returns "No ready work found" despite open children, suspect (1) wrong epic type and/or (2) a redundant `bd dep add <epic> <child>` creating a cycle with the parent-child relation.
+
+**Check with:** `bd show <epic-id>` and confirm the CHILDREN list matches the intended child set. Then `bd ready --explain` to see why anything is reported as blocked — if a child is "blocked by [the epic]", the epic is mistyped or the cycle exists.
+
+**Fix with:**
+- `bd update <epic-id> --type=epic` if the epic is mistyped.
+- `bd update <child-id> --parent=<epic-id>` for every child missing the link.
+- `bd dep remove <epic-id> <child-id>` for any redundant "epic depends on child" entry that creates a cycle with parent-child.
+
+#### Dependency ordering
+
+ralph-tui respects dependencies strictly within an epic: it will never select a bead whose dependencies are still open. Broken dependencies block the entire pipeline.
 
 **Verify:**
 - No circular dependencies
@@ -126,9 +144,9 @@ ralph-tui respects dependencies strictly: it will never select a bead whose depe
 - No missing dependencies (bead B uses what bead A creates, but no dep link exists)
 - No unnecessary dependencies (bead marked blocked when it could start immediately)
 
-**Check with:** `br list --json` and examine the `dependsOn` arrays. Mentally simulate: "If ralph-tui executes these in dependency order, does each agent have everything it needs?"
+**Check with:** `bd list --json` and examine the `dependsOn` arrays. Mentally simulate: "If ralph-tui executes these in dependency order, does each agent have everything it needs?"
 
-**Fix with:** `br dep add <issue> <depends-on>` or `br dep remove <issue> <depends-on>`
+**Fix with:** `bd dep add <issue> <depends-on>` or `bd dep remove <issue> <depends-on>`
 
 ### Check 4: Description Completeness
 
@@ -168,7 +186,7 @@ All five checks run every round, but each round leads with a different lens.
 Focus on shape. Are beads the right size for one context window? Are there obvious duplicates? Does the bead set cover the PRD? This round produces the most changes — splits, merges, new beads.
 
 ### Round 2: Dependencies + Quality Gates (Checks 2 + 3)
-Now that the structure is clean, verify the dependency graph and quality gate completeness. Run `br list --json` and trace the execution order. Append missing quality gates. This round typically fixes 3-5 dependency links and adds gates to 2-3 beads.
+Now that the structure is clean, verify the dependency graph and quality gate completeness. Run `bd list --json` and trace the execution order. Append missing quality gates. This round typically fixes 3-5 dependency links and adds gates to 2-3 beads.
 
 ### Round 3: Description Depth (Check 4)
 With the right beads identified, invest in making each one self-contained. Rewrite vague criteria. Add file paths, API references, table names. Remember: a fresh agent with no memory will read this description and nothing else.
@@ -238,20 +256,20 @@ After each round, record metrics:
 After each round, apply changes using the appropriate CLI:
 
 ```bash
-# Modify a bead description (beads-rust)
-br update <bead-id> --description="$(cat <<'EOF'
+# Modify a bead description
+bd update <bead-id> --description="$(cat <<'EOF'
 [updated description with quality gates]
 EOF
 )"
 
 # Add missing dependency
-br dep add <issue> <depends-on>
+bd dep add <issue> <depends-on>
 
 # Remove incorrect dependency
-br dep remove <issue> <depends-on>
+bd dep remove <issue> <depends-on>
 
 # Create a new bead (from a split or gap)
-br create --parent=<epic-id> \
+bd create --parent=<epic-id> \
   --title="[Story Title]" \
   --description="$(cat <<'EOF'
 [description with acceptance criteria + quality gates]
@@ -260,13 +278,8 @@ EOF
   --priority=[1-4]
 
 # Close a duplicate (superseded by another bead)
-br close <bead-id>
-
-# Sync to JSONL for git tracking (beads-rust only)
-br sync --flush-only
+bd close <bead-id>
 ```
-
-For beads (`bd`), replace `br` with `bd` and skip `br sync --flush-only`.
 
 > **CRITICAL:** Always use `<<'EOF'` (single-quoted) for HEREDOCs. This prevents shell interpretation of backticks, `$variables`, and `()` in descriptions.
 
@@ -287,7 +300,7 @@ After the final round, present:
 
 Then suggest:
 ```
-Ready to run: ralph-tui run --tracker beads-rust --epic <epic-id>
+Ready to run: ralph-tui run --tracker beads --epic <epic-id>
 ```
 
 ---
@@ -303,6 +316,12 @@ Ready to run: ralph-tui run --tracker beads-rust --epic <epic-id>
 **Over-polishing.** If you're on round 7 and still finding issues, the PRD is underspecified. Fix the PRD, regenerate beads, then polish.
 
 **Missing completion signal.** Every bead must end with `When all acceptance criteria are met, output <promise>COMPLETE</promise>`. Without this, ralph-tui cannot detect that the agent finished and the loop stalls. This is the #1 cause of "stuck" ralph-tui runs.
+
+**Missing parent linkage.** Wiring children only via `bd dep add <epic> <child>` is not enough — ralph-tui's `--epic <id>` filter reads the `parent` field, not the dependency graph. Symptom: ralph-tui reports "no tasks or epic found" even though `bd ready` shows work. Always run `bd show <epic-id>` and confirm every intended child appears under CHILDREN before suggesting the ralph-tui command.
+
+**Mistyped epic.** Creating the epic with `--type=feature` (because `bd prime` only lists `task|bug|feature` in its quick-reference) causes bd to treat the parent-child link from each child to the epic as a regular blocking dependency. `bd ready` returns "No ready work found", ralph-tui reports "no more tasks available after starting", and the session sits at iteration 0. Fix: `bd update <epic-id> --type=epic`. The `epic` type is supported by `bd update --type=` even when `bd prime` doesn't advertise it.
+
+**Cyclic epic-child deps.** Adding `bd dep add <epic> <child>` "so the epic closes when children close" creates a cycle: parent-child says child depends on epic, `bd dep add` says epic depends on child. `bd ready --explain` will show every node "blocked by" something in the cycle. Fix: remove the explicit `bd dep add` entries — parent-child + closing children already gives you "epic closes when children close" semantically.
 
 **Skipping the size check.** The most common ralph-tui failure is beads that are too large for one context window. When in doubt, split.
 
@@ -321,9 +340,13 @@ Before declaring beads ralph-ready:
 - [ ] All acceptance criteria are verifiable (no vague language)
 - [ ] Dependency graph has no cycles
 - [ ] Dependencies follow schema -> backend -> UI ordering
+- [ ] The epic has `type=epic` (verify with `bd show <epic-id>` — header reads `[epic]`)
+- [ ] Every child bead has `parent=<epic-id>` set (verify with `bd show <epic-id>` — every expected child appears in the CHILDREN list)
+- [ ] No redundant `bd dep add <epic> <child>` entries (would create a cycle with parent-child)
+- [ ] `bd ready` returns at least one ready bead (sanity-check the entry point exists)
 - [ ] No bead assumes context from a previous iteration
 - [ ] Every PRD requirement maps to at least one bead
 - [ ] No orphan beads without a clear purpose
 - [ ] Epic has external-ref linking back to source PRD
 - [ ] Polishing log recorded with metrics per round
-- [ ] `br sync --flush-only` run (beads-rust) or beads.jsonl verified (beads)
+- [ ] beads.jsonl verified
